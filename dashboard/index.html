@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Housing Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+</head>
+<body>
+  <!-- Email sign-in modal -->
+  <div id="email-modal" class="email-modal" style="display:none">
+    <div class="email-modal-content">
+      <h2>Welcome</h2>
+      <p>Enter your email to save and sync your favorites across devices.</p>
+      <input type="email" id="email-input" placeholder="you@example.com" autofocus />
+      <button id="email-submit" class="email-submit-btn">Continue</button>
+    </div>
+  </div>
+
+  <header class="app-header">
+    <h1 id="app-title">Housing Dashboard</h1>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="market-pulse">Market Pulse</button>
+      <button class="tab-btn" data-tab="listings">To Buy</button>
+      <button class="tab-btn" data-tab="area-compare">Area Compare</button>
+      <button class="tab-btn" data-tab="property-explorer">Sold</button>
+      <button class="tab-btn" data-tab="favorites">Favorites <span class="fav-tab-count" id="fav-tab-count"></span></button>
+    </nav>
+    <span id="user-email-display" class="user-email-display" style="display:none">
+      <span id="user-email-text"></span>
+      <a href="#" id="btn-signout" class="btn-signout">Sign out</a>
+    </span>
+  </header>
+
+  <div class="tab-content" id="app">
+    <div class="tab-panel active" id="panel-market-pulse">
+      <p class="empty-state">Loading data...</p>
+    </div>
+    <div class="tab-panel" id="panel-listings"></div>
+    <div class="tab-panel" id="panel-area-compare"></div>
+    <div class="tab-panel" id="panel-property-explorer"></div>
+    <div class="tab-panel" id="panel-favorites"></div>
+  </div>
+
+  <!-- Component scripts -->
+  <script src="js/utils.js?v=3"></script>
+  <script src="js/data.js?v=3"></script>
+  <script src="js/market-pulse.js?v=3"></script>
+  <script src="js/listings.js?v=3"></script>
+  <script src="js/area-compare.js?v=3"></script>
+  <script src="js/property-explorer.js?v=3"></script>
+  <script src="js/favorites.js?v=3"></script>
+
+  <script>
+    const TABS = {
+      'market-pulse': { component: MarketPulse, panel: 'panel-market-pulse', loaded: false },
+      'listings': { component: Listings, panel: 'panel-listings', loaded: false },
+      'area-compare': { component: AreaCompare, panel: 'panel-area-compare', loaded: false },
+      'property-explorer': { component: PropertyExplorer, panel: 'panel-property-explorer', loaded: false },
+      'favorites': { component: Favorites, panel: 'panel-favorites', loaded: false },
+    };
+
+    let dashboardData = null;
+
+    function switchTab(tabId) {
+      Prefs.set('activeTab', tabId);
+
+      // Update button states
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+      });
+
+      // Update panel visibility
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+      });
+      document.getElementById(TABS[tabId].panel).classList.add('active');
+
+      // Lazy-init the tab component on first visit
+      const tab = TABS[tabId];
+      if (!tab.loaded && dashboardData) {
+        tab.component.init(document.getElementById(tab.panel), dashboardData);
+        tab.loaded = true;
+      }
+
+      // Favorites tab always re-renders to pick up changes from other tabs
+      if (tabId === 'favorites' && tab.loaded && dashboardData) {
+        tab.component.init(document.getElementById(tab.panel), dashboardData);
+      }
+    }
+
+    // Sign-out button
+    document.getElementById('btn-signout').addEventListener('click', (e) => {
+      e.preventDefault();
+      UserSession.clearEmail();
+      UserSession.clearBinId();
+      localStorage.removeItem(FavoritesStore._storageKey);
+      localStorage.removeItem(DownvoteStore._storageKey);
+      FavoritesStore._cache = null;
+      DownvoteStore._cache = null;
+      location.reload();
+    });
+
+    // Tab click handlers
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // Session init: prompt for email if needed, sync with JSONBin
+    async function initSession() {
+      // Load jsonbin config from main config
+      try {
+        const cfgResp = await fetch('../config.json');
+        const cfg = await cfgResp.json();
+        SyncClient.init(cfg.jsonbin);
+      } catch (err) {
+        console.warn('Could not load config.json for sync:', err);
+      }
+
+      // If sync is not configured, skip email prompt entirely
+      if (!SyncClient.isConfigured()) return;
+
+      // Prompt for email if not signed in
+      if (!UserSession.isSignedIn()) {
+        document.getElementById('email-modal').style.display = 'flex';
+        const email = await new Promise(resolve => {
+          const submit = () => {
+            const val = document.getElementById('email-input').value.trim();
+            if (val) resolve(val);
+          };
+          document.getElementById('email-submit').addEventListener('click', submit);
+          document.getElementById('email-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submit();
+          });
+        });
+        UserSession.setEmail(email);
+        document.getElementById('email-modal').style.display = 'none';
+      }
+
+      // Show signed-in email in header
+      const email = UserSession.getEmail();
+      document.getElementById('user-email-text').textContent = email;
+      document.getElementById('user-email-display').style.display = '';
+
+      // Fetch server data and merge with localStorage
+      const serverData = await SyncClient.fetchUserData(email);
+      if (serverData) {
+        const localFavs = FavoritesStore.getAll();
+        const localDowns = DownvoteStore.getAll();
+        const serverFavs = serverData.favorites || {};
+        const serverDowns = serverData.downvotes || {};
+
+        // Migration: if server is empty but local has data, keep local and push up
+        if (!Object.keys(serverFavs).length && Object.keys(localFavs).length) {
+          // keep localStorage as-is
+        } else {
+          FavoritesStore.loadFromServer(serverFavs);
+        }
+
+        if (!Object.keys(serverDowns).length && Object.keys(localDowns).length) {
+          // keep localStorage as-is
+        } else {
+          DownvoteStore.loadFromServer(serverDowns);
+        }
+
+        // Merge prefs (excluding activeTab which stays local)
+        const localPrefs = Prefs.getSyncable();
+        const serverPrefs = serverData.prefs || {};
+        if (!Object.keys(serverPrefs).length && Object.keys(localPrefs).length) {
+          // keep local prefs (migration)
+        } else {
+          Prefs.loadFromServer(serverPrefs);
+        }
+
+        // Push current state to server (handles migration case)
+        SyncClient.saveUserData(FavoritesStore.getAll(), DownvoteStore.getAll());
+      }
+    }
+
+    // Init session, then load data and init first tab
+    initSession().then(() => DataLoader.load()).then(data => {
+      if (!data) return;
+      dashboardData = data;
+
+      // Set dynamic title from config
+      const metroName = data.config && data.config.metro && data.config.metro.name;
+      if (metroName) {
+        const title = metroName + ' Housing Dashboard';
+        document.title = title;
+        document.getElementById('app-title').textContent = title;
+      }
+
+      // Update favorites tab badge count
+      const favCount = FavoritesStore.count();
+      const favBadge = document.getElementById('fav-tab-count');
+      if (favBadge) {
+        favBadge.textContent = favCount > 0 ? favCount : '';
+        favBadge.style.display = favCount > 0 ? 'inline-flex' : 'none';
+      }
+
+      // Init saved or default tab
+      const savedTab = Prefs.get('activeTab', 'market-pulse');
+      const startTab = TABS[savedTab] ? savedTab : 'market-pulse';
+      switchTab(startTab);
+    });
+  </script>
+</body>
+</html>

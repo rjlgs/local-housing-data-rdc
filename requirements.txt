@@ -1,0 +1,5 @@
+# Visual quality assessment (CLIP-based)
+# These are only needed if running assess_visual_quality.py
+open-clip-torch>=2.24.0
+Pillow>=10.0
+torch>=2.0

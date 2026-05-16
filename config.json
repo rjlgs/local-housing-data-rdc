@@ -1,0 +1,91 @@
+{
+  "focus_areas": [
+    {
+      "name": "Raleigh",
+      "type": "city",
+      "redfin_region_id": "35711",
+      "zip_codes": ["27601", "27603", "27604", "27605", "27606", "27607", "27608", "27609", "27610", "27612", "27613", "27614", "27615", "27616", "27617"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Cary",
+      "type": "city",
+      "redfin_region_id": "35713",
+      "zip_codes": ["27511", "27513", "27518", "27519"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Apex",
+      "type": "city",
+      "redfin_region_id": "387",
+      "zip_codes": ["27502", "27523", "27539"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Wake Forest",
+      "type": "city",
+      "redfin_region_id": "35710",
+      "zip_codes": ["27587", "27588"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Holly Springs",
+      "type": "city",
+      "redfin_region_id": "8242",
+      "zip_codes": ["27540"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Morrisville",
+      "type": "city",
+      "redfin_region_id": "11357",
+      "zip_codes": ["27560"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Garner",
+      "type": "city",
+      "redfin_region_id": "6571",
+      "zip_codes": ["27529"],
+      "neighborhoods": []
+    },
+    {
+      "name": "Fuquay-Varina",
+      "type": "city",
+      "redfin_region_id": "6517",
+      "zip_codes": ["27526"],
+      "neighborhoods": []
+    }
+  ],
+  "metro": {
+    "name": "Raleigh-Cary",
+    "redfin_metro_code": "39580",
+    "redfin_market_slug": "raleigh",
+    "state_code": "NC",
+    "map_center": [35.7796, -78.6382],
+    "map_zoom": 10,
+    "baseline_city": "Raleigh"
+  },
+  "cities": [
+    { "region_id": "35711", "name": "Raleigh" },
+    { "region_id": "35713", "name": "Cary" },
+    { "region_id": "387", "name": "Apex" },
+    { "region_id": "6571", "name": "Garner" },
+    { "region_id": "35710", "name": "Wake Forest" },
+    { "region_id": "8242", "name": "Holly Springs" },
+    { "region_id": "6517", "name": "Fuquay-Varina" },
+    { "region_id": "11357", "name": "Morrisville" },
+    { "region_id": "9193", "name": "Knightdale" },
+    { "region_id": "18346", "name": "Wendell" },
+    { "region_id": "19293", "name": "Zebulon" },
+    { "region_id": "14939", "name": "Rolesville" },
+    { "region_id": "3340", "name": "Clayton" },
+    { "region_id": "16058", "name": "Smithfield" },
+    { "region_id": "353", "name": "Angier" },
+    { "region_id": "19289", "name": "Youngsville" },
+    { "region_id": "4909", "name": "Durham" },
+    { "region_id": "3059", "name": "Chapel Hill" },
+    { "region_id": "2736", "name": "Carrboro" },
+    { "region_id": "8085", "name": "Hillsborough" }
+  ]
+}

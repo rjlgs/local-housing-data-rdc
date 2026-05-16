@@ -1,0 +1,162 @@
+name: Deploy Dashboard
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Daily at 8am UTC
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Pipeline tier (empty = --if-stale)'
+        required: false
+        default: ''
+        type: choice
+        options: ['', active, sold, trends, all]
+      skip_visual_quality:
+        description: 'Skip visual quality assessment (VQ runs by default)'
+        required: false
+        default: false
+        type: boolean
+      force_photos:
+        description: 'Force re-fetch all photo URLs from Redfin'
+        required: false
+        default: false
+        type: boolean
+      force_visual_quality:
+        description: 'Force re-score all properties (ignore VQ cache)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: ['**']
+    paths: ['dashboard/**', 'scripts/**', 'config.json', '.github/workflows/**']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Cache pip dependencies
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      # Restore cached data/ (pipeline state, intermediate CSVs, photo cache)
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: pipeline-data-${{ hashFiles('config.json') }}-${{ github.run_number }}
+          restore-keys: pipeline-data-
+
+      # Install CLIP dependencies (VQ enabled by default)
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Run the data pipeline (main branch only)
+      - name: Run pipeline
+        if: github.ref == 'refs/heads/main'
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.skip_visual_quality }}" = "true" ]; then
+            FLAGS="$FLAGS --skip-visual-quality"
+          fi
+          if [ "${{ inputs.force_photos }}" = "true" ]; then
+            FLAGS="$FLAGS --force-photos"
+          fi
+          if [ "${{ inputs.force_visual_quality }}" = "true" ]; then
+            FLAGS="$FLAGS --force-visual-quality"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tier }}" ]; then
+            if [ "${{ inputs.tier }}" = "all" ]; then
+              python3 scripts/run_pipeline.py $FLAGS
+            else
+              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}" $FLAGS
+            fi
+          else
+            python3 scripts/run_pipeline.py --if-stale $FLAGS
+          fi
+
+      # Build dashboard data (feature branches - use cached data, no API calls)
+      - name: Build dashboard data
+        if: github.ref != 'refs/heads/main'
+        run: |
+          if [ -f data/dashboard_data.json ]; then
+            echo "Using cached dashboard data"
+          else
+            echo "No cached data - building minimal dataset"
+            python3 scripts/build_dashboard_data.py || true
+          fi
+
+      # Generate status page
+      - name: Generate status page
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            python3 scripts/generate_status_page.py
+          else
+            python3 scripts/generate_status_page.py || true
+          fi
+
+      # Save cache (main only - always, so partial data persists across runs)
+      - uses: actions/cache/save@v4
+        if: always() && github.ref == 'refs/heads/main'
+        with:
+          path: data
+          key: pipeline-data-${{ hashFiles('config.json') }}-${{ github.run_number }}
+
+      # Assemble site
+      - name: Assemble site
+        run: |
+          mkdir -p _site/dashboard _site/data
+          cp index.html _site/
+          cp config.json _site/
+          cp -r dashboard/* _site/dashboard/
+          [ -f data/dashboard_data.json ] && cp data/dashboard_data.json _site/data/ || echo '{}' > _site/data/dashboard_data.json
+          [ -f data/status.html ] && cp data/status.html _site/
+          [ -f data/zcta_boundaries.geojson ] && cp data/zcta_boundaries.geojson _site/data/ || true
+
+      # Deploy to surge.sh (all branches)
+      - name: Deploy to Surge
+        env:
+          SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
+        run: |
+          if [ -z "$SURGE_TOKEN" ]; then
+            echo "SURGE_TOKEN not set - skipping Surge deployment"
+            exit 0
+          fi
+          npm install -g surge
+          BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
+          SURGE_URL="${BRANCH_SLUG}-housing-dashboard.surge.sh"
+          surge _site "$SURGE_URL" --token "$SURGE_TOKEN"
+          echo "Deployed to https://$SURGE_URL"
+
+      # Upload pages artifact (main branch only)
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: _site
+
+  deploy-pages:
+    needs: build-and-deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

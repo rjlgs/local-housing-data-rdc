@@ -1,0 +1,22 @@
+name: Cleanup PR Preview
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Teardown preview
+        env:
+          SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
+        run: |
+          if [ -z "$SURGE_TOKEN" ]; then
+            echo "SURGE_TOKEN not set - nothing to clean up"
+            exit 0
+          fi
+          npm install -g surge
+          PREVIEW_URL="pr-${{ github.event.pull_request.number }}-housing-dashboard.surge.sh"
+          surge teardown $PREVIEW_URL --token $SURGE_TOKEN || echo "Preview may not exist"
+          echo "Cleaned up preview: $PREVIEW_URL"
