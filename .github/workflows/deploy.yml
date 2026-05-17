@@ -26,6 +26,11 @@ on:
         required: false
         default: false
         type: boolean
+      force_market_trends:
+        description: 'Bypass ETag cache for redfin_market_*.csv'
+        required: false
+        default: false
+        type: boolean
   push:
     branches: ['**']
     paths: ['dashboard/**', 'scripts/**', 'config.json', '.github/workflows/**']
@@ -65,6 +70,12 @@ jobs:
       # Install CLIP dependencies (VQ enabled by default)
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # Optionally invalidate the market-trends ETag cache so the next run
+      # re-downloads city/zip-level data.
+      - name: Force market trends refresh
+        if: github.event_name == 'workflow_dispatch' && inputs.force_market_trends == true
+        run: rm -f data/redfin_market_etags.json data/redfin_market_city.csv data/redfin_market_zip.csv
 
       # Run the data pipeline (main branch only)
       - name: Run pipeline
